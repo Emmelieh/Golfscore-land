@@ -1,0 +1,169 @@
+
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Golfscore – Ölands GK</title>
+  <style>
+    body { font-family: sans-serif; padding: 10px; }
+    input, button { font-size: 1em; margin: 5px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    td, th { border: 1px solid #ccc; padding: 5px; text-align: center; }
+    .green { background-color: #cfc; }
+    .yellow { background-color: #ffc; }
+    .red { background-color: #fcc; }
+  </style>
+</head>
+<body>
+  <h2>Golfscore – Ölands GK</h2>
+  <div id="setup">
+    <p>Lägg till spelare (max 4):</p>
+    <div id="players"></div>
+    <button onclick="addPlayer()">+ Spelare</button>
+    <button onclick="startRound()">Starta runda</button>
+  </div>
+
+  <div id="play" style="display:none;">
+    <h3>Hål <span id="holeNum">1</span> (Par: <span id="holePar"></span>, Index: <span id="holeIdx"></span>)</h3>
+    <div id="inputs"></div>
+    <button onclick="nextHole()">Nästa hål</button>
+    <h4>Totalscore</h4>
+    <table>
+      <thead><tr><th>Spelare</th><th>Slag</th><th>Poäng</th></tr></thead>
+      <tbody id="totals"></tbody>
+    </table>
+  </div>
+
+  <div id="history">
+    <h3>Historik</h3>
+    <button onclick="exportCSV()">Exportera till CSV</button>
+    <ul id="roundList"></ul>
+  </div>
+
+  <script>
+    const holes = [
+      {par:4, idx:12},{par:4, idx:4},{par:4, idx:14},{par:4, idx:18},
+      {par:3, idx:10},{par:5, idx:2},{par:3, idx:16},{par:4, idx:6},
+      {par:4, idx:8},{par:4, idx:7},{par:3, idx:15},{par:4, idx:5},
+      {par:3, idx:17},{par:5, idx:1},{par:4, idx:9},{par:4, idx:13},
+      {par:5, idx:3},{par:4, idx:11}
+    ];
+
+    let players = [], currentHole = 0, roundData = [];
+
+    function addPlayer() {
+      if (players.length >= 4) return alert("Max 4 spelare");
+      const i = players.length;
+      document.getElementById("players").insertAdjacentHTML("beforeend",
+        `<div>Spelare ${i+1}: <input id="p${i}n" placeholder="Namn">
+        HCP <input id="p${i}hcp" type="number" step="0.1" style="width:60px;"></div>`);
+      players.push({});
+    }
+
+    function getShotsPerHole(hcp) {
+      const base = Math.floor(hcp / 18);
+      const extra = hcp % 18;
+      return holes.map(h => base + (h.idx <= extra ? 1 : 0));
+    }
+
+    function startRound() {
+      players = players.map((_, i) => {
+        const n = document.getElementById(`p${i}n`).value.trim() || `Spelare${i+1}`;
+        const h = parseFloat(document.getElementById(`p${i}hcp`).value) || 0;
+        return { name: n, hcp: h, extra: getShotsPerHole(h) };
+      });
+      document.getElementById("setup").style.display = "none";
+      document.getElementById("play").style.display = "block";
+      updateHole();
+    }
+
+    function updateHole() {
+      const h = holes[currentHole];
+      document.getElementById("holeNum").textContent = currentHole + 1;
+      document.getElementById("holePar").textContent = h.par;
+      document.getElementById("holeIdx").textContent = h.idx;
+      const inp = document.getElementById("inputs");
+      inp.innerHTML = "";
+      players.forEach((p, i) => {
+        inp.insertAdjacentHTML("beforeend",
+          `<div>${p.name}: <input id="s${i}" type="number" min="1" style="width:60px;"></div>`);
+      });
+    }
+
+    function nextHole() {
+      const h = holes[currentHole];
+      players.forEach((p, i) => {
+        const s = parseInt(document.getElementById(`s${i}`).value);
+        if (isNaN(s)) return alert("Ange slag för alla");
+        const shotsGiven = p.extra[currentHole];
+        const net = s - shotsGiven;
+        const diff = net - h.par;
+        let pts = 0;
+        if (diff <= -3) pts = 5;
+        else if (diff == -2) pts = 4;
+        else if (diff == -1) pts = 3;
+        else if (diff == 0) pts = 2;
+        else if (diff == 1) pts = 1;
+
+        if (!roundData[i]) roundData[i] = { name: p.name, shots: 0, points: 0, score: [] };
+        roundData[i].shots += s;
+        roundData[i].points += pts;
+        roundData[i].score.push({hole: currentHole+1, raw: s, net: net, pts: pts});
+      });
+      currentHole++;
+      updateTotals();
+      if (currentHole >= holes.length) {
+        saveRound();
+        alert("Rundan är klar och sparad!");
+        return location.reload();
+      }
+      updateHole();
+    }
+
+    function updateTotals() {
+      const tb = document.getElementById("totals");
+      tb.innerHTML = "";
+      roundData.forEach(r => {
+        let cls = r.points >= 36 ? 'green' : r.points >= 30 ? 'yellow' : 'red';
+        tb.insertAdjacentHTML("beforeend",
+          `<tr class="${cls}"><td>${r.name}</td><td>${r.shots}</td><td>${r.points}</td></tr>`);
+      });
+    }
+
+    function saveRound() {
+      const rounds = JSON.parse(localStorage.getItem("golfRounds") || "[]");
+      rounds.push({ date: new Date().toISOString().slice(0, 10), players: roundData });
+      localStorage.setItem("golfRounds", JSON.stringify(rounds));
+      loadHistory();
+    }
+
+    function loadHistory() {
+      const rounds = JSON.parse(localStorage.getItem("golfRounds") || "[]");
+      const ul = document.getElementById("roundList");
+      ul.innerHTML = "";
+      rounds.forEach(r => {
+        ul.insertAdjacentHTML("beforeend",
+          `<li>${r.date}: ${r.players.map(p => `${p.name} (${p.shots} slag, ${p.points}p)`).join(", ")}</li>`);
+      });
+    }
+
+    function exportCSV() {
+      const rounds = JSON.parse(localStorage.getItem("golfRounds") || "[]");
+      let csv = "Datum,Namn,Slag,Poäng\n";
+      rounds.forEach(r => {
+        r.players.forEach(p => {
+          csv += `${r.date},${p.name},${p.shots},${p.points}\n`;
+        });
+      });
+      const blob = new Blob([csv], { type: "text/csv" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "golfhistorik.csv";
+      a.click();
+    }
+
+    loadHistory();
+  </script>
+</body>
+</html>
