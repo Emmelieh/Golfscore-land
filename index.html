@@ -1,160 +1,143 @@
-
 <!DOCTYPE html>
 <html lang="sv">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Ölands Golfklubb – Score</title>
-  <style>
-    body { font-family: -apple-system, sans-serif; padding: 10px; background: #f9f9f9; }
-    h1 { text-align: center; font-size: 1.8em; margin-top: 0.5em; }
-    .app-header {
-      background: linear-gradient(to right, #82c4a6, #b4e1cd);
-      padding: 15px;
-      border-radius: 8px;
-      margin-bottom: 20px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    }
-    .app-header h1 {
-      margin: 0;
-      color: #fff;
-    }
-    input, button { font-size: 1em; margin: 5px; padding: 6px; }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 15px;
-      background: white;
-    }
-    td, th {
-      border: 1px solid #ccc;
-      padding: 6px;
-      text-align: center;
-    }
-    .totals {
-      background: #e2e2e2;
-      font-weight: bold;
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ölands Golfklubb – Score</title>
+<style>
+body { font-family: -apple-system, sans-serif; margin: 0; padding: 1em; background: #f6f6f6; }
+h1 { text-align: center; background: #7ecaa3; color: white; padding: 0.5em; border-radius: 6px; }
+.note { text-align: center; color: #666; margin-bottom: 1em; }
+input { padding: 4px; margin: 4px; font-size: 1em; }
+button { padding: 6px 12px; margin: 8px 4px; }
+table { width: 100%; border-collapse: collapse; margin-top: 1em; background: white; }
+th, td { border: 1px solid #ccc; padding: 6px; text-align: center; }
+th { background: #e8f5e9; }
+</style>
 </head>
 <body>
-  <div class="app-header">
-    <h1>Ölands Golfklubb – Score</h1>
-  </div>
+<h1>Ölands Golfklubb – Score</h1>
+<div class="note">Par & hålindex baserat på röd tee</div>
 
-  <div id="setup">
-    <p>Lägg till spelare (max 4):</p>
-    <div id="players"></div>
-    <button onclick="addPlayer()">+ Spelare</button>
-    <button onclick="startRound()">Starta runda</button>
-  </div>
+<div id="setup">
+  <p>Lägg till spelare (max 4):</p>
+  <div id="players"></div>
+  <button onclick="addPlayer()">+ Spelare</button>
+  <button onclick="startRound()">Starta runda</button>
+</div>
 
-  <div id="play" style="display:none;">
-    <h3>Hål <span id="holeNum">1</span></h3>
-    <div id="inputs"></div>
-    <button onclick="nextHole()">Nästa hål</button>
+<div id="play" style="display:none;">
+  <h3>Hål <span id="holeNum">1</span> (Par: <span id="holePar"></span>, Index: <span id="holeIdx"></span>)</h3>
+  <div id="inputs"></div>
+  <button onclick="nextHole()">Nästa hål</button>
+  <div id="scoreTables"></div>
+</div>
 
-    <h4>Resultat</h4>
-    <div id="scoreTables"></div>
-  </div>
+<script>
+const holes = [{par:4, idx:12},{par:4, idx:4},{par:4, idx:14},{par:4, idx:18},{par:3, idx:10},{par:5, idx:2},{par:3, idx:16},{par:4, idx:6},{par:4, idx:8},{par:4, idx:7},{par:3, idx:15},{par:4, idx:5},{par:3, idx:17},{par:5, idx:1},{par:4, idx:9},{par:4, idx:13},{par:5, idx:3},{par:4, idx:11}];
+let players = [], currentHole = 0;
 
-  <script>
-    const holes = Array.from({length: 18}, (_, i) => ({par: 4, idx: i + 1}));
-    let players = [], currentHole = 0;
+function addPlayer() {
+  if (players.length >= 4) return alert("Max 4 spelare");
+  const i = players.length;
+  document.getElementById("players").insertAdjacentHTML("beforeend",
+    `<div>Spelare ${i+1}: <input id="p${i}n" placeholder="Namn">
+     HCP <input id="p${i}hcp" type="number" step="0.1" style="width:60px;"></div>`);
+  players.push({});
+}
 
-    function addPlayer() {
-      if (players.length >= 4) return alert("Max 4 spelare");
-      const i = players.length;
-      document.getElementById("players").insertAdjacentHTML("beforeend",
-        `<div>Spelare ${i+1}: <input id="p${i}n" placeholder="Namn">
-         HCP <input id="p${i}hcp" type="number" step="0.1" style="width:60px;"></div>`);
-      players.push({});
+function getShotsPerHole(hcp) {
+  const base = Math.floor(hcp / 18);
+  const extra = hcp % 18;
+  return holes.map(h => base + (h.idx <= extra ? 1 : 0));
+}
+
+function startRound() {
+  players = players.map((_, i) => {
+    const n = document.getElementById(`p${i}n`).value.trim() || `Spelare${i+1}`;
+    const h = parseFloat(document.getElementById(`p${i}hcp`).value) || 0;
+    return { name: n, hcp: h, extra: getShotsPerHole(h), score: [], totalShots: 0, totalPoints: 0 };
+  });
+  document.getElementById("setup").style.display = "none";
+  document.getElementById("play").style.display = "block";
+  updateHole();
+}
+
+function updateHole() {
+  const h = holes[currentHole];
+  document.getElementById("holeNum").textContent = currentHole + 1;
+  document.getElementById("holePar").textContent = h.par;
+  document.getElementById("holeIdx").textContent = h.idx;
+  const inp = document.getElementById("inputs");
+  inp.innerHTML = "";
+  players.forEach((p, i) => {
+    inp.insertAdjacentHTML("beforeend",
+      `<div>${p.name}: <input id="s${i}" type="number" min="1" style="width:60px;"></div>`);
+  });
+}
+
+function nextHole() {
+  const h = holes[currentHole];
+  players.forEach((p, i) => {
+    const s = parseInt(document.getElementById(`s${i}`).value);
+    if (isNaN(s)) return alert("Ange slag för alla");
+    const shotsGiven = p.extra[currentHole];
+    const net = s - shotsGiven;
+    const diff = net - h.par;
+    let pts = 0;
+    if (diff <= -3) pts = 5;
+    else if (diff == -2) pts = 4;
+    else if (diff == -1) pts = 3;
+    else if (diff == 0) pts = 2;
+    else if (diff == 1) pts = 1;
+
+    p.score.push({hole: currentHole+1, raw: s, pts: pts});
+    p.totalShots += s;
+    p.totalPoints += pts;
+  });
+  currentHole++;
+  if (currentHole >= holes.length) {
+    alert("Rundan är klar!");
+  } else {
+    updateHole();
+  }
+  updateScoreTable();
+}
+
+function updateScoreTable() {
+  const wrapper = document.getElementById("scoreTables");
+  wrapper.innerHTML = "";
+  const headerRow = ["Hål"];
+  for (let h = 1; h <= currentHole; h++) headerRow.push(h);
+  headerRow.push("Totalt");
+
+  let parRow = ["Par"];
+  for (let h = 0; h < currentHole; h++) parRow.push(holes[h].par);
+  parRow.push("–");
+
+  let html = "<table><thead><tr>" + headerRow.map(h => `<th>${h}</th>`).join("") + "</tr></thead><tbody>";
+  html += "<tr>" + parRow.map(cell => `<td>${cell}</td>`).join("") + "</tr>";
+
+  players.forEach(p => {
+    let shotRow = [`${p.name} – Slag`];
+    let pointRow = [`${p.name} – Poäng`];
+
+    for (let h = 0; h < currentHole; h++) {
+      const r = p.score[h];
+      shotRow.push(r ? r.raw : "");
+      pointRow.push(r ? r.pts : "");
     }
 
-    function getShotsPerHole(hcp) {
-      const base = Math.floor(hcp / 18);
-      const extra = hcp % 18;
-      return holes.map(h => base + (h.idx <= extra ? 1 : 0));
-    }
+    shotRow.push(p.totalShots);
+    pointRow.push(p.totalPoints);
 
-    function startRound() {
-      players = players.map((_, i) => {
-        const n = document.getElementById(`p${i}n`).value.trim() || `Spelare${i+1}`;
-        const h = parseFloat(document.getElementById(`p${i}hcp`).value) || 0;
-        return { name: n, hcp: h, extra: getShotsPerHole(h), score: [], totalShots: 0, totalPoints: 0 };
-      });
-      document.getElementById("setup").style.display = "none";
-      document.getElementById("play").style.display = "block";
-      updateHole();
-    }
+    html += "<tr>" + shotRow.map(cell => `<td>${cell}</td>`).join("") + "</tr>";
+    html += "<tr>" + pointRow.map(cell => `<td>${cell}</td>`).join("") + "</tr>";
+  });
 
-    function updateHole() {
-      const h = holes[currentHole];
-      document.getElementById("holeNum").textContent = currentHole + 1;
-      const inp = document.getElementById("inputs");
-      inp.innerHTML = "";
-      players.forEach((p, i) => {
-        inp.insertAdjacentHTML("beforeend",
-          `<div>${p.name}: <input id="s${i}" type="number" min="1" style="width:60px;"></div>`);
-      });
-    }
-
-    function nextHole() {
-      players.forEach((p, i) => {
-        const s = parseInt(document.getElementById(`s${i}`).value);
-        if (isNaN(s)) return alert("Ange slag för alla");
-        const shotsGiven = p.extra[currentHole];
-        const net = s - shotsGiven;
-        const diff = net - holes[currentHole].par;
-        let pts = 0;
-        if (diff <= -3) pts = 5;
-        else if (diff == -2) pts = 4;
-        else if (diff == -1) pts = 3;
-        else if (diff == 0) pts = 2;
-        else if (diff == 1) pts = 1;
-
-        p.score.push({hole: currentHole+1, raw: s, pts: pts});
-        p.totalShots += s;
-        p.totalPoints += pts;
-      });
-      currentHole++;
-      if (currentHole >= holes.length) {
-        alert("Rundan är klar!");
-      } else {
-        updateHole();
-      }
-      updateScoreTable();
-    }
-
-    function updateScoreTable() {
-      const wrapper = document.getElementById("scoreTables");
-      wrapper.innerHTML = "";
-      const headerRow = ["Hål"];
-      for (let h = 1; h <= currentHole; h++) headerRow.push(h);
-      headerRow.push("Totalt");
-
-      players.forEach(p => {
-        let shotRow = [`${p.name} – Slag`];
-        let pointRow = [`${p.name} – Poäng`];
-
-        for (let h = 0; h < currentHole; h++) {
-          const r = p.score[h];
-          shotRow.push(r ? r.raw : "");
-          pointRow.push(r ? r.pts : "");
-        }
-
-        shotRow.push(p.totalShots);
-        pointRow.push(p.totalPoints);
-
-        let table = "<table><thead><tr>";
-        headerRow.forEach(h => table += `<th>${h}</th>`);
-        table += "</tr></thead><tbody>";
-        table += "<tr>" + shotRow.map(cell => `<td>${cell}</td>`).join("") + "</tr>";
-        table += "<tr>" + pointRow.map(cell => `<td>${cell}</td>`).join("") + "</tr>";
-        table += "</tbody></table><br>";
-        wrapper.insertAdjacentHTML("beforeend", table);
-      });
-    }
-  </script>
+  html += "</tbody></table>";
+  wrapper.innerHTML = html;
+}
+</script>
 </body>
 </html>
